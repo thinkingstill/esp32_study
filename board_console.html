@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32-S3 板载控制台</title>
+<style>
+  :root{
+    --bg:#0b0d10; --bg2:#111418; --panel:#171a20; --panel2:#1d2129;
+    --border:#262b34; --border2:#2e3540;
+    --text:#e8eaee; --text-dim:#9aa3b0; --text-faint:#66707e;
+    --accent:#6366f1; --accent2:#8b5cf6; --green:#34d399; --amber:#f59e0b; --red:#f87171;
+    --radius:14px; --radius-sm:9px;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:radial-gradient(1200px 600px at 15% -10%, #1a1d2b 0%, transparent 55%),
+               radial-gradient(1000px 700px at 100% 0%, #171232 0%, transparent 50%),
+               var(--bg);
+    color:var(--text); -webkit-font-smoothing:antialiased;
+    padding:32px; display:flex; flex-direction:column; gap:22px;
+  }
+  header{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px}
+  .brand{display:flex; align-items:center; gap:12px}
+  .logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:grid;place-items:center;font-weight:700;font-size:17px;color:#fff;
+    box-shadow:0 6px 18px rgba(99,102,241,.35)}
+  h1{font-size:18px;font-weight:600;letter-spacing:-.02em}
+  .sub{font-size:12px;color:var(--text-faint);margin-top:2px}
+  .conn{display:flex;align-items:center;gap:10px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--text-faint);transition:.2s}
+  .dot.on{background:var(--green);box-shadow:0 0 10px rgba(52,211,153,.7)}
+  .dot.err{background:var(--red);box-shadow:0 0 10px rgba(248,113,113,.7)}
+  .conn-label{font-size:12px;color:var(--text-dim);font-family:var(--mono)}
+
+  .addr-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  input[type=text]{
+    background:var(--panel);border:1px solid var(--border);color:var(--text);
+    border-radius:var(--radius-sm);padding:9px 12px;font-size:13px;font-family:var(--mono);
+    outline:none;transition:.15s;width:220px;
+  }
+  input[type=text]:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.18)}
+  button{
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;
+    border-radius:var(--radius-sm);padding:9px 16px;font-size:13px;font-weight:600;
+    cursor:pointer;transition:.15s;letter-spacing:.01em;
+  }
+  button:hover{filter:brightness(1.1);transform:translateY(-1px)}
+  button.ghost{background:transparent;border:1px solid var(--border2);color:var(--text-dim)}
+  button.ghost:hover{border-color:var(--accent);color:var(--text)}
+  button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}
+  .card{
+    background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--border);
+    border-radius:var(--radius);padding:18px;position:relative;overflow:hidden;
+  }
+  .card::before{content:"";position:absolute;inset:0 0 auto 0;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(99,102,241,.5),transparent)}
+  .card .k{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em}
+  .card .v{font-size:26px;font-weight:600;margin-top:8px;font-family:var(--mono);letter-spacing:-.02em}
+  .card .u{font-size:12px;color:var(--text-dim);margin-top:2px}
+  .bar{margin-top:12px;height:6px;border-radius:3px;background:#0a0c0f;overflow:hidden;border:1px solid var(--border)}
+  .barfill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .5s ease}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:760px){
+    body{padding:14px;gap:16px}
+    header{flex-direction:column;align-items:flex-start;gap:10px}
+    .sub{display:none}
+    h1{font-size:16px}
+    .grid{grid-template-columns:repeat(2,1fr);gap:10px}
+    .card{padding:12px}
+    .card .v{font-size:18px}
+    .card .k{font-size:10px}
+    .two{grid-template-columns:1fr;gap:12px}
+    .panel{padding:14px;gap:12px}
+    /* 输入框全宽自适应 */
+    input[type=text]{width:100%;font-size:16px;padding:10px 12px}
+    .addr-row{flex-direction:column;align-items:stretch}
+    .addr-row button{width:100%;padding:11px}
+    /* 扫描/上传按钮行：小屏下换行 */
+    .scan-btn-row{flex-wrap:wrap}
+    .scan-btn-row input[type=text]{width:100%}
+    .scan-btn-row button{flex:1;min-width:90px;padding:10px}
+    .scan-btn-row .hint{width:100%}
+    /* 文件上传 */
+    input[type=file]{width:100%;font-size:14px}
+    .cmd-row{flex-direction:column}
+    .cmd-row button{width:100%}
+    /* 日志/列表高度缩小 */
+    .log,.scan-list{height:160px}
+    footer{flex-direction:column;gap:6px;text-align:center}
+    .chip{font-size:11px;padding:6px 11px}
+  }
+  @media(max-width:380px){
+    .grid{grid-template-columns:1fr 1fr;gap:8px}
+    .card .v{font-size:16px}
+  }
+
+  .panel{
+    background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--border);
+    border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:14px;
+  }
+  .panel h2{font-size:13px;font-weight:600;color:var(--text-dim);letter-spacing:.02em}
+  .log{
+    background:#0a0c0f;border:1px solid var(--border);border-radius:var(--radius-sm);
+    height:220px;overflow-y:auto;padding:12px;font-family:var(--mono);font-size:12px;line-height:1.7;
+  }
+  .log .l{white-space:pre-wrap;word-break:break-all}
+  .log .in{color:var(--accent2)}
+  .log .out{color:var(--green)}
+  .log .sys{color:var(--text-faint)}
+  .log .err{color:var(--red)}
+
+  .cmd-row{display:flex;gap:10px}
+  .cmd-row input{flex:1}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{
+    background:var(--panel2);border:1px solid var(--border2);color:var(--text-dim);
+    border-radius:20px;padding:6px 13px;font-size:12px;cursor:pointer;font-family:var(--mono);transition:.15s;
+  }
+  .chip:hover{border-color:var(--accent);color:var(--text)}
+  .scan-list{background:#0a0c0f;border:1px solid var(--border);border-radius:var(--radius-sm);
+    height:220px;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
+  .scan-item{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:8px 10px;border-radius:8px;background:var(--panel2);border:1px solid var(--border)}
+  .scan-item .nm{font-size:12px;color:var(--text);font-family:var(--mono);word-break:break-all}
+  .scan-item .sub{font-size:11px;color:var(--text-faint);font-family:var(--mono);margin-top:2px}
+  .scan-item .sig{font-size:12px;color:var(--green);font-family:var(--mono);white-space:nowrap}
+  .scan-empty{font-size:12px;color:var(--text-faint);text-align:center;padding:20px 0}
+  .scan-btn-row{display:flex;gap:10px;align-items:center}
+  .scan-btn-row .hint{font-size:11px;color:var(--text-faint)}
+  footer{font-size:11px;color:var(--text-faint);margin-top:auto;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">S3</div>
+      <div>
+        <h1>ESP32-S3 板载控制台</h1>
+        <div class="sub">阿尔法蛋 D1 · MicroPython · WiFi + WebSocket</div>
+      </div>
+    </div>
+    <div class="conn">
+      <span class="dot" id="dot"></span>
+      <span class="conn-label" id="connLabel">未连接</span>
+    </div>
+  </header>
+
+  <div class="addr-row">
+    <input type="text" id="ip" placeholder="板子 IP，例如 192.168.4.1" value="">
+    <button id="btnConnect">连接</button>
+    <button id="btnDisconnect" class="ghost" disabled>断开</button>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="k">运行时间</div><div class="v" id="mUptime">--</div><div class="u">秒</div></div>
+    <div class="card"><div class="k">RAM 内存</div><div class="v" id="mFree">--</div><div class="u">空闲 / <span id="mAlloc">--</span> 已用</div><div class="bar"><div class="barfill" id="mFreeBar"></div></div></div>
+    <div class="card"><div class="k">Flash 存储</div><div class="v" id="mFlashFree">--</div><div class="u">剩余 / <span id="mFlashTotal">--</span> 总量</div><div class="bar"><div class="barfill" id="mFlashBar"></div></div></div>
+    <div class="card"><div class="k">CPU 温度</div><div class="v" id="mTemp">--</div><div class="u">°C</div></div>
+    <div class="card"><div class="k">主频</div><div class="v" id="mFreq">--</div><div class="u">MHz</div></div>
+    <div class="card"><div class="k">WiFi 信号</div><div class="v" id="mRssi">--</div><div class="u">dBm</div></div>
+    <div class="card"><div class="k">电池采样</div><div class="v" id="mBat">--</div><div class="u"><span id="mBatNote">GPIO20 · ADC</span></div><div class="bar"><div class="barfill" id="mBatBar"></div></div></div>
+    <div class="card"><div class="k">AP 热点</div><div class="v" id="mAp">--</div><div class="u"><span id="mApNote">未开启</span></div></div>
+  </div>
+
+  <div class="two">
+    <div class="panel">
+      <h2>指令控制台</h2>
+      <div class="chips" id="chips">
+        <span class="chip" data-cmd="status">status</span>
+        <span class="chip" data-cmd="ping">ping</span>
+        <span class="chip" data-cmd="gc">gc 回收</span>
+        <span class="chip" data-cmd="hello">hello</span>
+      </div>
+      <div class="cmd-row">
+        <input type="text" id="cmd" placeholder="输入指令，如 status / ping / gc">
+        <button id="btnSend">发送</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>通信日志</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="panel">
+      <h2>WiFi 扫描</h2>
+      <div class="scan-btn-row">
+        <button id="btnWifiScan">开始扫描</button>
+        <span class="hint">扫描期间连接会短暂抖动，属正常现象</span>
+      </div>
+      <div class="scan-list" id="wifiList"><div class="scan-empty">点击「开始扫描」查看周边 WiFi</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>BLE 扫描</h2>
+      <div class="scan-btn-row">
+        <button id="btnBleScan">开始扫描</button>
+        <span class="hint">扫描约 4 秒</span>
+      </div>
+      <div class="scan-list" id="bleList"><div class="scan-empty">点击「开始扫描」查看周边 BLE 设备</div></div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="panel">
+      <h2>BLE 广播</h2>
+      <div class="scan-btn-row">
+        <input type="text" id="advName" placeholder="广播名称" value="ESP32S3-D1">
+        <button id="btnAdvStart">开始广播</button>
+        <button id="btnAdvStop" class="ghost">停止</button>
+      </div>
+      <div class="scan-list" id="advStatus" style="height:auto;min-height:60px">
+        <div class="scan-empty">未广播。设置名称后点「开始广播」，手机即可扫描发现</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>关于供电</h2>
+      <div class="scan-list" id="powerInfo" style="height:auto;min-height:60px">
+        <div class="scan-item"><div><div class="nm">ESP32-S3 由 USB 供电</div>
+        <div class="sub">电池仅供给扫描头(CSK)，拔 USB 主控即断电</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="panel">
+      <h2>AP 热点（2.4GHz）</h2>
+      <div class="scan-btn-row">
+        <input type="text" id="apSsid" placeholder="热点名称" value="ESP32S3-D1">
+        <input type="text" id="apPass" placeholder="密码(≥8位)" value="12345678">
+      </div>
+      <div class="scan-btn-row" style="margin-top:8px">
+        <button id="btnApStart">开启热点</button>
+        <button id="btnApStop" class="ghost">关闭热点</button>
+      </div>
+      <div class="scan-list" id="apStatus" style="height:auto;min-height:60px">
+        <div class="scan-empty">未开启。开启后手机可连此热点访问板子控制台</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>功能说明</h2>
+      <div class="scan-list" id="helpInfo" style="height:auto;min-height:60px">
+        <div class="scan-item"><div><div class="nm">AP 热点 = 2.4GHz</div>
+        <div class="sub">ESP32-S3 仅支持 2.4GHz，不支持 5GHz</div></div></div>
+        <div class="scan-item"><div><div class="nm">开启热点后连接</div>
+        <div class="sub">手机连上热点，浏览器访问网关 IP(默认 192.168.4.1)</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="panel">
+      <h2>文件管理</h2>
+      <div class="scan-btn-row">
+        <input type="file" id="fileInput" style="flex:1">
+        <button id="btnUpload">上传</button>
+      </div>
+      <div class="scan-btn-row" style="margin-top:8px">
+        <button id="btnLs" class="ghost">刷新文件列表</button>
+        <span class="hint">最大 100KB · base64 传输</span>
+      </div>
+      <div class="scan-list" id="fileList"><div class="scan-empty">点击「刷新文件列表」查看板子文件</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>使用提示</h2>
+      <div class="scan-list" id="tipsInfo" style="height:auto;min-height:60px">
+        <div class="scan-item"><div><div class="nm">更新网页</div>
+        <div class="sub">上传同名 index.html 即可替换控制台页面</div></div></div>
+        <div class="scan-item"><div><div class="nm">更新板端代码</div>
+        <div class="sub">上传 main.py 后需重启板子生效</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <span>协议 WebSocket · 板端 80 端口 · 单文件纯前端</span>
+    <span id="footerIp">板子未连接</span>
+  </footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let ws = null, timer = null;
+
+function log(msg, cls='out'){
+  const el = document.createElement('div');
+  el.className = 'l ' + cls;
+  el.textContent = msg;
+  $('log').appendChild(el);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+function fmtBytes(n){
+  if(n==null) return '--';
+  if(n >= 1048576) return (n/1048576).toFixed(2)+' MB';
+  if(n >= 1024) return (n/1024).toFixed(1)+' KB';
+  return n+' B';
+}
+function setConn(state){
+  const dot=$('dot'), lbl=$('connLabel');
+  dot.className = 'dot ' + (state==='on'?'on':state==='err'?'err':'');
+  lbl.textContent = state==='on'?'已连接':state==='err'?'连接失败':'未连接';
+  $('btnConnect').disabled = (state==='on');
+  $('btnDisconnect').disabled = (state!=='on');
+}
+
+function send(obj){
+  if(!ws || ws.readyState!==1){ log('未连接，无法发送','err'); return; }
+  const s = typeof obj==='string' ? obj : JSON.stringify(obj);
+  ws.send(s);
+  log(s, 'in');
+}
+
+function handleMsg(data){
+  let obj; try{ obj = JSON.parse(data); }catch(e){ log(data,'out'); return; }
+  log(JSON.stringify(obj), 'out');
+  const t = obj.type, d = obj.data||{};
+  if(t==='hello'){ setConn('on'); $('footerIp').textContent = '板子: '+ (d.board||'ESP32-S3'); }
+  if(t==='status'){
+    $('mUptime').textContent = d.uptime_s ?? '--';
+    // RAM
+    const free = d.free_heap, alloc = d.alloc_heap;
+    $('mFree').textContent = fmtBytes(free);
+    $('mAlloc').textContent = fmtBytes(alloc);
+    if(free!=null && alloc!=null){
+      const ramTotal = free + alloc;
+      $('mFreeBar').style.width = (ramTotal>0 ? (alloc/ramTotal*100) : 0) + '%';
+    }
+    // Flash
+    const fl = d.flash;
+    if(fl && fl.total!=null){
+      $('mFlashFree').textContent = fmtBytes(fl.free);
+      $('mFlashTotal').textContent = fmtBytes(fl.total);
+      const usedPct = fl.total>0 ? (fl.used/fl.total*100) : 0;
+      $('mFlashBar').style.width = usedPct + '%';
+    }
+    $('mTemp').textContent = d.cpu_temp_c>=0 ? d.cpu_temp_c : '--';
+    $('mFreq').textContent = d.freq_mhz ?? '--';
+    $('mRssi').textContent = d.rssi!=null ? d.rssi : '--';
+    // 电池采样
+    const bat = d.battery;
+    if(bat && bat.adc_v!=null){
+      $('mBat').textContent = bat.adc_v.toFixed(3) + ' V';
+      $('mBatNote').textContent = 'GPIO'+bat.pin+' · ADC 采样值';
+      // 以 0~3.3V 为满量程画进度条
+      const pct = Math.max(0, Math.min(100, bat.adc_v / 3.3 * 100));
+      $('mBatBar').style.width = pct + '%';
+    } else {
+      $('mBat').textContent = '--';
+      $('mBatNote').textContent = bat && bat.error ? '读取失败' : 'GPIO20 · ADC';
+    }
+    // AP 热点状态
+    const ap = d.ap;
+    if(ap && ap.running){
+      $('mAp').textContent = 'ON';
+      $('mApNote').textContent = ap.ssid + ' · ' + (ap.station_count||0) + ' 台设备';
+      // 同步更新 AP 面板的独立状态区
+      const apBox = $('apStatus');
+      apBox.innerHTML = '<div class="scan-item"><div><div class="nm">热点已开启: '+ap.ssid+'</div>'+
+        '<div class="sub">网关 IP: '+ap.ip+' · 已连接 '+(ap.station_count||0)+' 台设备</div></div>'+
+        '<div class="sig">ON</div></div>';
+    } else {
+      $('mAp').textContent = '--';
+      $('mApNote').textContent = ap && ap.error ? '错误' : '未开启';
+    }
+    if(d.ip) $('footerIp').textContent = 'IP: ' + d.ip;
+  }
+  if(t==='pong'){ log('Pong: ' + JSON.stringify(d.echo||{}), 'sys'); }
+  if(t==='wifiscan'){ renderWifiScan(d); }
+  if(t==='blescan'){ renderBleScan(d); }
+  if(t==='adv'){ renderAdv(d); }
+  if(t==='ap'){ renderAp(d); }
+  if(t==='ls'){ renderLs(d); }
+  if(t==='upload'){ renderUpload(d); }
+}
+
+function renderLs(d){
+  const box = $('fileList');
+  if(d.error){ box.innerHTML = '<div class="scan-empty">错误: '+d.error+'</div>'; return; }
+  const files = d.files || [];
+  if(!files.length){ box.innerHTML = '<div class="scan-empty">板子上没有文件</div>'; return; }
+  box.innerHTML = files.map(f=>{
+    return '<div class="scan-item"><div><div class="nm">'+f.name+'</div>'+
+      '<div class="sub">'+fmtBytes(f.size)+'</div></div></div>';
+  }).join('');
+}
+
+function renderUpload(d){
+  const box = $('fileList');
+  if(d.error){ log('上传失败: '+d.error,'err'); return; }
+  log('上传成功: '+d.name+' ('+fmtBytes(d.size)+')','sys');
+  // 上传后自动刷新文件列表
+  send({cmd:'ls', args:{}});
+}
+
+function renderAp(d){
+  const box = $('apStatus');
+  if(d.error){ box.innerHTML = '<div class="scan-empty">错误: '+d.error+'</div>'; return; }
+  if(d.running){
+    box.innerHTML = '<div class="scan-item"><div><div class="nm">热点已开启: '+d.ssid+'</div>'+
+      '<div class="sub">网关 IP: '+d.ip+' · 2.4GHz · 手机连上后访问此 IP</div></div>'+
+      '<div class="sig">ON</div></div>';
+  } else {
+    box.innerHTML = '<div class="scan-empty">未开启。开启后手机可连此热点访问板子控制台</div>';
+  }
+}
+
+function renderAdv(d){
+  const box = $('advStatus');
+  if(d.error){ box.innerHTML = '<div class="scan-empty">错误: '+d.error+'</div>'; return; }
+  if(d.running){
+    box.innerHTML = '<div class="scan-item"><div><div class="nm">正在广播: '+d.name+'</div>'+
+      '<div class="sub">用手机 BLE 扫描 App 搜索此名称</div></div>'+
+      '<div class="sig">ON</div></div>';
+  } else {
+    box.innerHTML = '<div class="scan-empty">未广播。设置名称后点「开始广播」</div>';
+  }
+}
+
+function renderWifiScan(d){
+  const box = $('wifiList');
+  if(d.error){ box.innerHTML = '<div class="scan-empty">扫描失败: '+d.error+'</div>'; return; }
+  const aps = d.aps || [];
+  if(!aps.length){ box.innerHTML = '<div class="scan-empty">未发现周边 WiFi</div>'; return; }
+  box.innerHTML = aps.map(ap=>{
+    const auth = ['open','WEP','WPA','WPA2','WPA/WPA2','WPA3','WPA2/WPA3'][ap.authmode] || ('#'+ap.authmode);
+    return '<div class="scan-item"><div><div class="nm">'+ap.ssid+'</div>'+
+      '<div class="sub">CH '+ap.channel+' · '+auth+(ap.hidden?' · 隐藏':'')+'</div></div>'+
+      '<div class="sig">'+ap.rssi+' dBm</div></div>';
+  }).join('');
+}
+
+function renderBleScan(d){
+  const box = $('bleList');
+  if(d.error){ box.innerHTML = '<div class="scan-empty">扫描失败: '+d.error+'</div>'; return; }
+  const devs = d.devices || [];
+  if(!devs.length){ box.innerHTML = '<div class="scan-empty">未发现周边 BLE 设备</div>'; return; }
+  box.innerHTML = devs.map(dev=>{
+    return '<div class="scan-item"><div><div class="nm">'+(dev.name||'(未命名)')+'</div>'+
+      '<div class="sub">'+dev.mac+'</div></div>'+
+      '<div class="sig">'+dev.rssi+' dBm</div></div>';
+  }).join('');
+}
+
+function connect(){
+  // 优先用当前页面 host（手机连热点访问时 location.hostname 就是 192.168.4.1）
+  let ip = window.location.hostname;
+  const manual = $('ip').value.trim();
+  // 如果手动填了 IP 且与当前 host 不同，优先用手动填的（针对电脑通过家里 WiFi 访问场景）
+  if(manual && manual !== ip){ ip = manual; }
+  if(!ip){ log('请先填写板子 IP','err'); return; }
+  log('连接 ws://'+ip+':80 ...','sys');
+  try{ ws = new WebSocket('ws://'+ip+':80/'); }catch(e){ log('创建连接失败: '+e,'err'); return; }
+  ws.onopen = ()=>{ log('WebSocket 已打开','sys'); };
+  ws.onmessage = e=>handleMsg(e.data);
+  ws.onclose = ()=>{ log('连接已关闭','sys'); setConn(''); };
+  ws.onerror = ()=>{ log('连接错误','err'); setConn('err'); };
+}
+
+$('btnConnect').onclick = connect;
+$('btnDisconnect').onclick = ()=>{ if(ws){ws.close();} };
+$('btnSend').onclick = ()=>{
+  const c = $('cmd').value.trim();
+  if(!c) return;
+  let obj;
+  if(c.startsWith('{')){ try{ obj=JSON.parse(c); }catch(e){ log('JSON 解析失败','err'); return; } }
+  else obj = { cmd: c, args: {} };
+  send(obj); $('cmd').value='';
+};
+$('cmd').addEventListener('keydown', e=>{ if(e.key==='Enter') $('btnSend').click(); });
+$('chips').addEventListener('click', e=>{
+  const chip = e.target.closest('.chip');
+  if(!chip) return;
+  send({cmd: chip.dataset.cmd, args:{}});
+});
+
+$('btnWifiScan').onclick = ()=>{
+  if(!ws || ws.readyState!==1){ log('未连接，无法扫描','err'); return; }
+  log('开始 WiFi 扫描...','sys');
+  $('wifiList').innerHTML = '<div class="scan-empty">扫描中...</div>';
+  send({cmd:'wifiscan', args:{}});
+};
+$('btnBleScan').onclick = ()=>{
+  if(!ws || ws.readyState!==1){ log('未连接，无法扫描','err'); return; }
+  log('开始 BLE 扫描...','sys');
+  $('bleList').innerHTML = '<div class="scan-empty">扫描中...</div>';
+  send({cmd:'blescan', args:{}});
+};
+$('btnAdvStart').onclick = ()=>{
+  if(!ws || ws.readyState!==1){ log('未连接，无法广播','err'); return; }
+  const name = $('advName').value.trim();
+  log('开始广播: ' + (name||'ESP32S3-D1'),'sys');
+  send({cmd:'adv_start', args:{name: name||'ESP32S3-D1'}});
+};
+$('btnAdvStop').onclick = ()=>{
+  if(!ws || ws.readyState!==1){ log('未连接','err'); return; }
+  log('停止广播','sys');
+  send({cmd:'adv_stop', args:{}});
+};
+$('btnApStart').onclick = ()=>{
+  if(!ws || ws.readyState!==1){ log('未连接，无法开热点','err'); return; }
+  const ssid = $('apSsid').value.trim();
+  const pass = $('apPass').value.trim();
+  log('开启热点: ' + (ssid||'ESP32S3-D1'),'sys');
+  send({cmd:'ap_start', args:{ssid: ssid||'ESP32S3-D1', password: pass||'12345678'}});
+};
+$('btnApStop').onclick = ()=>{
+  if(!ws || ws.readyState!==1){ log('未连接','err'); return; }
+  log('关闭热点','sys');
+  send({cmd:'ap_stop', args:{}});
+};
+$('btnLs').onclick = ()=>{
+  if(!ws || ws.readyState!==1){ log('未连接','err'); return; }
+  send({cmd:'ls', args:{}});
+};
+$('btnUpload').onclick = ()=>{
+  if(!ws || ws.readyState!==1){ log('未连接','err'); return; }
+  const file = $('fileInput').files[0];
+  if(!file){ log('请先选择文件','err'); return; }
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    // 转 base64（去掉 data:xxx;base64, 前缀）
+    const b64 = reader.result.split(',')[1];
+    log('上传中: '+file.name+' ('+fmtBytes(file.size)+')...','sys');
+    send({cmd:'upload', args:{name: file.name, data: b64}});
+  };
+  reader.readAsDataURL(file);
+};
+
+// 页面加载后自动连接（手机通过热点访问时无需手动点连接）
+window.addEventListener('load', ()=>{
+  // 延迟一下确保 DOM 就绪
+  setTimeout(connect, 300);
+});
+
+// 连接后每 2 秒拉一次状态
+setInterval(()=>{ if(ws && ws.readyState===1){ send({cmd:'status', args:{}}); } }, 2000);
+</script>
+</body>
+</html>

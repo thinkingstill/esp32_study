@@ -1,0 +1,15 @@
+# 本地 WiFi 凭证（如自行拆分配置请取消注释）
+# config.py
+
+# 固件/二进制备份（含设备私有数据，切勿提交）
+*.bin
+*.img
+*.hex
+
+# Python
+__pycache__/
+*.pyc
+
+# 系统
+.DS_Store
+Thumbs.db
